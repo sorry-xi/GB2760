@@ -1,0 +1,82 @@
+//XML代码块
+		<View Id="IngredientListGlobal" xsi:type="Property" UseDefaultCard="false">
+			<Toolbar>
+				<Action Id="UpdateGlobalIngredientList" PostAction="postActionRedrawNode" Control="Button">
+					<Rule Exp="attr('State') == 'Revision.State:DRAFT'"/>
+					<Request Module="FormulatedProduct" Operation="FoodLabelUpdateGlobalIngredientList"/>
+				</Action>
+                <Action Id="Ingredienttesting" OnAction="Site.Ingredienttesting" >
+                    <Rule Exp="currentRoleName()=='Admin' || currentRoleName()=='应用研发工程师'"/>
+                </Action>
+			</Toolbar>
+			<Heading Index="Global" Id="IngredientPerLanguage" Name="GlobalIngredientList"/>
+			<!-- <Actions>
+				<Action Id="FlatIngredientToggle" ControllerClass="FormulatedProduct.FoodLabel.FlatIngredientsToggleController" ActionClass="FormulatedProduct.FlatIngredientsToggleButton" PostAction="csi.page.refreshViews"/>
+			</Actions> -->
+		</View>
+		
+//JS代码块
+		Ingredienttesting: async function (ac) {
+            console.log("ac:", ac);
+            const writer = ac.m_writer;
+            const mcache = ac.m_cache;
+
+            try {
+                // 找到当前节点
+                const currentNode = mcache.getNode(ac.m_urlNode);
+                // 找到上级节点
+                const parentNode = mcache.getNode(currentNode.__Parent__);
+                // 找到上上级节点（RecipeDataSheet）
+                const grandParentNode = mcache.getNode(parentNode.__Parent__);
+
+                // 找到 ParentDataSheetRevision 对象
+                const parentDataSheetRevUrl = currentNode.ParentDataSheetRevision;
+                const parentDataSheetRevObj = mcache.getNode(parentDataSheetRevUrl);
+
+                // 判断 C8_RDS_Category 是否为空
+                if (!parentDataSheetRevObj.C8_RDS_Category || parentDataSheetRevObj.C8_RDS_Category.trim() == "" || parentDataSheetRevObj.C8_RDS_Category == "C8_category:") {
+                    jp.alert("请先到汇总页面选择GB2760分类");
+                    return;
+                }
+
+                // 新增：确认弹窗
+                const confirmStr = "点击该按钮后，将会进行配料合规检测，是否继续？";
+                layer.confirm(confirmStr, {
+                    btn: ['确定', '取消'],
+                    closeBtn: 0
+                }, async function (index) {
+                    // 用户点击“确定”，关闭确认框
+                    layer.close(index);
+
+                    // 构造请求体
+                    const payload = [
+                        { url: grandParentNode.$URL }
+                    ];
+                    console.log("发送到后端的请求体：", JSON.stringify(payload, null, 2));
+
+                    // ✅ 使用我们新建的 POST 方法调用后端
+                    const result = await requestSRMServiceApiPost('feishu/aily/gb2760', payload);
+                    console.log("后端返回结果：", result);
+
+                    // ✅ 结果处理逻辑保持一致
+                    if (!result.success) {
+                        jp.alert("检测失败，原因：" + (result.data || '未知错误'));
+                        return;
+                    }
+
+                    writer.execute({ sync: true });
+                    jp.alert("检测成功！");
+                    location.reload();
+                }, function (index) {
+                    // 用户点击“取消”
+                    layer.close(index);
+                    console.log("用户取消了配料合规检测");
+                });
+
+            } catch (err) {
+                console.error("请求出错：", err);
+                jp.alert("检测请求异常，请稍后重试！");
+            }
+
+            return true;
+        },
